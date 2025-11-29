@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 Dashboard</title>
+  <style>
+    #dashboard { display: none; }
+    #loginForm { max-width: 300px; margin-top: 50px; }
+    label, input { display: block; margin-bottom: 10px; width: 100%; }
+    button { padding: 5px 10px; }
+    #loginError { color: red; }
+  </style>
+</head>
+<body>
+  <h2>ESP32 Dashboard</h2>
+
+  <!-- FORMULARZ LOGOWANIA -->
+  <div id="loginForm">
+    <h3>Logowanie</h3>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Hasło">
+    <button onclick="login()">Zaloguj</button>
+    <p id="loginError"></p>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <h2>Sterowanie ESP32 – Regulacja Dwustawna</h2>
+
+    <!-- Ustawienia temperatury -->
+    <h3>Ustawienia temperatury (DS18B20)</h3>
+    <label>Temperatura MIN: </label>
+    <input type="number" id="tempMin" step="0.1"> °C<br><br>
+
+    <label>Temperatura MAX: </label>
+    <input type="number" id="tempMax" step="0.1"> °C<br><br>
+
+    <button onclick="saveSettings()">Zapisz ustawienia</button>
+
+    <hr>
+
+    <!-- Odczyty -->
+    <h3>Odczyty czujników</h3>
+    <p>Temperatura DS18B20: <span id="temp">--</span> °C</p>
+    <p>Temperatura BMP280: <span id="bmpTemp">--</span> °C</p>
+    <p>Ciśnienie BMP280: <span id="bmpPressure">--</span> hPa</p>
+    <p>Grzałka: <span id="heaterState">--</span></p>
+
+    <hr>
+
+    <!-- Sterowanie RGB -->
+    <h3>LED RGB</h3>
+    <input type="color" id="colorPicker" value="#ff0000">
+
+    <br><br>
+    <button onclick="logout()">Wyloguj</button>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+
+  <script>
+    // --- KONFIGURACJA FIREBASE ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDhjqjLQHWSucCbi_UL42WN_lJFVtzT6H0",
+      authDomain: "TWOJ_PROJEKT.firebaseapp.com",
+      databaseURL: "https://esp32-inz-default-rtdb.firebaseio.com/",
+      projectId: "ESP32 INZ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    // --- SPRAWDZENIE STANU ZALOGOWANIA ---
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById("loginForm").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+        initApp();
+      } else {
+        document.getElementById("loginForm").style.display = "block";
+        document.getElementById("dashboard").style.display = "none";
+      }
+    });
+
+    // --- FUNKCJE LOGOWANIA/ WYLOGOWANIA ---
+    function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const errorElem = document.getElementById("loginError");
+      errorElem.innerText = "";
+
+      auth.signInWithEmailAndPassword(email, password)
+        .then(() => {
+          // dashboard pokaże się automatycznie w onAuthStateChanged
+        })
+        .catch(error => {
+          errorElem.innerText = "Błąd logowania: " + error.message;
+        });
+    }
+
+    function logout() {
+      auth.signOut();
+    }
+
+    // --- TWOJA ORYGINALNA FUNKCJA DASHBOARD ---
+    function initApp() {
+      // --- Pobieranie ustawień MIN/MAX ---
+      db.ref("/settings/tempMin").on("value", snap => {
+        document.getElementById("tempMin").value = snap.val();
+      });
+      db.ref("/settings/tempMax").on("value", snap => {
+        document.getElementById("tempMax").value = snap.val();
+      });
+
+      // --- Odczyt temperatury DS18B20 ---
+      db.ref("/temperature").on("value", snapshot => {
+        document.getElementById("temp").innerText = snapshot.val();
+      });
+
+      // --- BMP280 ---
+      db.ref("/bmp280/temperature").on("value", snapshot => {
+        document.getElementById("bmpTemp").innerText = snapshot.val();
+      });
+      db.ref("/bmp280/pressure").on("value", snapshot => {
+        document.getElementById("bmpPressure").innerText = snapshot.val();
+      });
+
+      // --- Stan grzałki ---
+      db.ref("/heaterState").on("value", snap => {
+        const v = snap.val();
+        document.getElementById("heaterState").innerText =
+          v ? "Włączona" : "Wyłączona";
+      });
+
+      // --- Sterowanie RGB ---
+      const picker = document.getElementById("colorPicker");
+      picker.addEventListener("input", e => {
+        const hex = e.target.value;
+        db.ref("/led/r").set(parseInt(hex.substr(1, 2), 16));
+        db.ref("/led/g").set(parseInt(hex.substr(3, 2), 16));
+        db.ref("/led/b").set(parseInt(hex.substr(5, 2), 16));
+      });
+    }
+
+    // --- ZAPIS USTAWIEŃ DO FIREBASE ---
+    function saveSettings() {
+      const min = parseFloat(document.getElementById("tempMin").value);
+      const max = parseFloat(document.getElementById("tempMax").value);
+
+      if (min >= max) {
+        alert("Temperatura MIN musi być mniejsza niż MAX.");
+        return;
+      }
+
+      db.ref("/settings/tempMin").set(min);
+      db.ref("/settings/tempMax").set(max);
+
+      alert("Zapisano ustawienia.");
+    }
+  </script>
+</body>
+</html>
