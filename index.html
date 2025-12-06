@@ -41,9 +41,9 @@
 
     <!-- Odczyty -->
     <h3>Odczyty czujników</h3>
-    <p>Temperatura DS18B20: <span id="temp">--</span> °C</p>
-    <p>Temperatura BMP280: <span id="bmpTemp">--</span> °C</p>
-    <p>Ciśnienie BMP280: <span id="bmpPressure">--</span> hPa</p>
+    <p>Temperatura wody (DS18B20): <span id="temp">--</span> °C</p>
+    <p>Temperatura w pomieszczeniu (BMP280): <span id="bmpTemp">--</span> °C</p>
+    <p>Ciśnienie w pomieszczeniu (BMP280): <span id="bmpPressure">--</span> hPa</p>
     <p>Grzałka: <span id="heaterState">--</span></p>
 
     <hr>
@@ -54,6 +54,9 @@
 
     <br>
     <button onclick="logout()">Wyloguj</button>
+     <p>
+      <a href="https://rozmi61.github.io/ESP32/wykresy" target="_blank">Wykresy</a>
+    </p>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
