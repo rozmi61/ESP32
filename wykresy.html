@@ -2,10 +2,12 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <title>ESP32 – Dashboard Live</title>
+  <title>Internetowy układ regulacji akwarium - Wykresy</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Plugin do poziomych linii -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.1/dist/chartjs-plugin-annotation.min.js"></script>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
@@ -32,29 +34,29 @@
 </head>
 
 <body>
-  <h2>ESP32 – Dashboard (Wykresy Live)</h2>
+  <h2>Internetowy układ regulacji akwarium - Wykresy</h2>
 
   <!-- 1. Temperatura DS18B20 -->
   <div class="chart-block">
-    <h3>1) Temperatura DS18B20 (z tempMin / tempMax)</h3>
+    <h3>1) Temperatura wody (DS18B20 z punktami tempMin i tempMax) </h3>
     <canvas id="chartTempDS"></canvas>
   </div>
 
   <!-- 2. Stan grzałki -->
   <div class="chart-block">
-    <h3>2) Stan grzałki (0 = OFF, 1 = ON)</h3>
+    <h3>2) Przebieg sterowania (Stan grzałki 0 = OFF, 1 = ON)</h3>
     <canvas id="chartHeater"></canvas>
   </div>
 
   <!-- 3. Temp BMP280 -->
   <div class="chart-block">
-    <h3>3) Temperatura BMP280</h3>
+    <h3>3) Temperatura w pomieszczeniu (BMP280)</h3>
     <canvas id="chartBMPtemp"></canvas>
   </div>
 
   <!-- 4. Ciśnienie BMP280 -->
   <div class="chart-block">
-    <h3>4) Ciśnienie BMP280</h3>
+    <h3>4) Ciśnienie w pomieszczeniu (BMP280)</h3>
     <canvas id="chartBMPpress"></canvas>
   </div>
 
@@ -80,8 +82,6 @@
     })
     .catch(e => alert("Błąd logowania do Firebase"));
 
-
-
   // ===========================================================
   //                   TWORZENIE WYKRESÓW
   // ===========================================================
@@ -89,17 +89,15 @@
 
     // Helper – ograniczenie do 60 punktów
     function limit(chart) {
-      if (chart.data.labels.length > 60) {
+      if (chart.data.labels.length > 200) {
         chart.data.labels.shift();
         chart.data.datasets.forEach(ds => ds.data.shift());
       }
     }
 
-
-
-    // --------------------------------------------------------------------
-    // 1) WYKRES DS18B20 + tempMin + tempMax
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
+    // 1) WYKRES DS18B20 + poziome linie tempMin / tempMax (plugin annotation)
+    // -----------------------------------------------------------
     const ctx1 = document.getElementById("chartTempDS").getContext("2d");
     const chartTempDS = new Chart(ctx1, {
       type: "line",
@@ -109,24 +107,45 @@
           {
             label: "Temperatura (°C)",
             data: [],
-            borderWidth: 2
-          },
-          {
-            label: "tempMin",
-            data: [],
-            borderDash: [5, 5],
-            borderWidth: 1
-          },
-          {
-            label: "tempMax",
-            data: [],
-            borderDash: [5, 5],
-            borderWidth: 1
+            borderWidth: 2,
+            borderColor: 'black',
+            backgroundColor: 'rgba(0,0,0,0.0)'
           }
         ]
       },
       options: {
-        animation: false
+        animation: false,
+        plugins: {
+          annotation: {
+            annotations: {
+              tempMinLine: {
+                type: 'line',
+                yMin: 0,
+                yMax: 0,
+                borderColor: 'blue',
+                borderWidth: 1,
+                borderDash: [5,5],
+                label: { content: 'MIN', enabled: true, position: 'start' }
+              },
+              tempMaxLine: {
+                type: 'line',
+                yMin: 0,
+                yMax: 0,
+                borderColor: 'red',
+                borderWidth: 1,
+                borderDash: [5,5],
+                label: { content: 'MAX', enabled: true, position: 'start' }
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            // opcjonalnie ustaw min/max, np:
+            // min: 0,
+            // max: 40
+          }
+        }
       }
     });
 
@@ -145,22 +164,22 @@
     // tempMin
     db.ref("/settings/tempMin").on("value", snap => {
       const minv = snap.val();
-      chartTempDS.data.datasets[1].data = Array(chartTempDS.data.labels.length).fill(minv);
+      chartTempDS.options.plugins.annotation.annotations.tempMinLine.yMin = minv;
+      chartTempDS.options.plugins.annotation.annotations.tempMinLine.yMax = minv;
       chartTempDS.update();
     });
 
     // tempMax
     db.ref("/settings/tempMax").on("value", snap => {
       const maxv = snap.val();
-      chartTempDS.data.datasets[2].data = Array(chartTempDS.data.labels.length).fill(maxv);
+      chartTempDS.options.plugins.annotation.annotations.tempMaxLine.yMin = maxv;
+      chartTempDS.options.plugins.annotation.annotations.tempMaxLine.yMax = maxv;
       chartTempDS.update();
     });
 
-
-
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     // 2) WYKRES STANU GRZAŁKI
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     const ctx2 = document.getElementById("chartHeater").getContext("2d");
     const chartHeater = new Chart(ctx2, {
       type: "line",
@@ -190,25 +209,14 @@
       chartHeater.update();
     });
 
-
-
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     // 3) WYKRES TEMPERATURY BMP280
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     const ctx3 = document.getElementById("chartBMPtemp").getContext("2d");
     const chartBMPtemp = new Chart(ctx3, {
       type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "BMP280 Temp (°C)",
-          data: [],
-          borderWidth: 2
-        }]
-      },
-      options: {
-        animation: false
-      }
+      data: { labels: [], datasets: [{ label: "BMP280 Temp (°C)", data: [], borderWidth: 2 }] },
+      options: { animation: false }
     });
 
     db.ref("/bmp280/temperature").on("value", snap => {
@@ -222,25 +230,14 @@
       chartBMPtemp.update();
     });
 
-
-
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     // 4) WYKRES CIŚNIENIA BMP280
-    // --------------------------------------------------------------------
+    // -----------------------------------------------------------
     const ctx4 = document.getElementById("chartBMPpress").getContext("2d");
     const chartBMPpress = new Chart(ctx4, {
       type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "BMP280 Ciśnienie (hPa)",
-          data: [],
-          borderWidth: 2
-        }]
-      },
-      options: {
-        animation: false
-      }
+      data: { labels: [], datasets: [{ label: "BMP280 Ciśnienie (hPa)", data: [], borderWidth: 2 }] },
+      options: { animation: false }
     });
 
     db.ref("/bmp280/pressure").on("value", snap => {
