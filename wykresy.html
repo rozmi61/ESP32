@@ -15,53 +15,36 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 
   <style>
-    body {
-      font-family: Arial;
-      margin: 20px;
-    }
-    canvas {
-      margin-top: 25px;
-      margin-bottom: 40px;
-    }
-    h2 {
-      margin-bottom: 10px;
-    }
-    .chart-block {
-      max-width: 700px;
-      margin-bottom: 40px;
-    }
+    body { font-family: Arial; margin: 20px; }
+    canvas { margin-top: 25px; margin-bottom: 40px; }
+    .chart-block { max-width: 700px; margin-bottom: 40px; }
   </style>
 </head>
 
 <body>
-  <h2>Internetowy układ regulacji akwarium - Wykresy</h2>
+<h2>Internetowy układ regulacji akwarium - Wykresy</h2>
 
-  <!-- 1. Temperatura DS18B20 -->
-  <div class="chart-block">
-    <h3>1) Temperatura wody (DS18B20 z punktami tempMin i tempMax) </h3>
-    <canvas id="chartTempDS"></canvas>
-  </div>
+<div class="chart-block">
+  <h3>1) Temperatura wody (DS18B20)</h3>
+  <canvas id="chartTempDS"></canvas>
+</div>
 
-  <!-- 2. Stan grzałki -->
-  <div class="chart-block">
-    <h3>2) Przebieg sterowania (Stan grzałki 0 = OFF, 1 = ON)</h3>
-    <canvas id="chartHeater"></canvas>
-  </div>
+<div class="chart-block">
+  <h3>2) Stan grzałki</h3>
+  <canvas id="chartHeater"></canvas>
+</div>
 
-  <!-- 3. Temp BMP280 -->
-  <div class="chart-block">
-    <h3>3) Temperatura w pomieszczeniu (BMP280)</h3>
-    <canvas id="chartBMPtemp"></canvas>
-  </div>
+<div class="chart-block">
+  <h3>3) Temperatura BMP280</h3>
+  <canvas id="chartBMPtemp"></canvas>
+</div>
 
-  <!-- 4. Ciśnienie BMP280 -->
-  <div class="chart-block">
-    <h3>4) Ciśnienie w pomieszczeniu (BMP280)</h3>
-    <canvas id="chartBMPpress"></canvas>
-  </div>
+<div class="chart-block">
+  <h3>4) Ciśnienie BMP280</h3>
+  <canvas id="chartBMPpress"></canvas>
+</div>
 
 <script>
-  // --- KONFIGURACJA FIREBASE ---
   const firebaseConfig = {
     apiKey: "AIzaSyDhjqjLQHWSucCbi_UL42WN_lJFVtzT6H0",
     authDomain: "TWOJ_PROJEKT.firebaseapp.com",
@@ -73,21 +56,12 @@
   const db = firebase.database();
   const auth = firebase.auth();
 
-  // -----------------------------
-  // LOGOWANIE DO FIREBASE
-  // -----------------------------
   auth.signInWithEmailAndPassword("esp32@myiot.com", "esp32123")
-    .then(() => {
-      initCharts();
-    })
-    .catch(e => alert("Błąd logowania do Firebase"));
+    .then(initCharts)
+    .catch(() => alert("Błąd logowania do Firebase"));
 
-  // ===========================================================
-  //                   TWORZENIE WYKRESÓW
-  // ===========================================================
   function initCharts() {
 
-    // Helper – ograniczenie do 60 punktów
     function limit(chart) {
       if (chart.data.labels.length > 200) {
         chart.data.labels.shift();
@@ -95,163 +69,117 @@
       }
     }
 
-    // -----------------------------------------------------------
-    // 1) WYKRES DS18B20 + poziome linie tempMin / tempMax (plugin annotation)
-    // -----------------------------------------------------------
-    const ctx1 = document.getElementById("chartTempDS").getContext("2d");
-    const chartTempDS = new Chart(ctx1, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "Temperatura (°C)",
-            data: [],
-            borderWidth: 2,
-            borderColor: 'black',
-            backgroundColor: 'rgba(0,0,0,0.0)'
-          }
-        ]
-      },
-      options: {
-        animation: false,
-        plugins: {
-          annotation: {
-            annotations: {
-              tempMinLine: {
-                type: 'line',
-                yMin: 0,
-                yMax: 0,
-                borderColor: 'blue',
-                borderWidth: 1,
-                borderDash: [5,5],
-                label: { content: 'MIN', enabled: true, position: 'start' }
-              },
-              tempMaxLine: {
-                type: 'line',
-                yMin: 0,
-                yMax: 0,
-                borderColor: 'red',
-                borderWidth: 1,
-                borderDash: [5,5],
-                label: { content: 'MAX', enabled: true, position: 'start' }
+    // ===== DS18B20 =====
+    const chartTempDS = new Chart(
+      document.getElementById("chartTempDS"),
+      {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "Temp (°C)", data: [], borderWidth: 2 }] },
+        options: {
+          animation: false,
+          plugins: {
+            annotation: {
+              annotations: {
+                min: { type: 'line', yMin: 0, yMax: 0, borderColor: 'blue', borderDash: [5,5] },
+                max: { type: 'line', yMin: 0, yMax: 0, borderColor: 'red', borderDash: [5,5] }
               }
             }
           }
-        },
-        scales: {
-          y: {
-            // opcjonalnie ustaw min/max, np:
-            // min: 0,
-            // max: 40
-          }
         }
       }
-    });
+    );
 
-    // Aktualna temperatura
     db.ref("/temperature").on("value", snap => {
       const v = snap.val();
-      const t = new Date().toLocaleTimeString();
+      if (v === null) return;
 
-      chartTempDS.data.labels.push(t);
-      chartTempDS.data.datasets[0].data.push(v);
-
+      chartTempDS.data.labels.push(new Date().toLocaleTimeString());
+      chartTempDS.data.datasets[0].data.push(
+        Number(Number(v).toFixed(1))
+      );
       limit(chartTempDS);
       chartTempDS.update();
     });
 
-    // tempMin
     db.ref("/settings/tempMin").on("value", snap => {
-      const minv = snap.val();
-      chartTempDS.options.plugins.annotation.annotations.tempMinLine.yMin = minv;
-      chartTempDS.options.plugins.annotation.annotations.tempMinLine.yMax = minv;
-      chartTempDS.update();
-    });
-
-    // tempMax
-    db.ref("/settings/tempMax").on("value", snap => {
-      const maxv = snap.val();
-      chartTempDS.options.plugins.annotation.annotations.tempMaxLine.yMin = maxv;
-      chartTempDS.options.plugins.annotation.annotations.tempMaxLine.yMax = maxv;
-      chartTempDS.update();
-    });
-
-    // -----------------------------------------------------------
-    // 2) WYKRES STANU GRZAŁKI
-    // -----------------------------------------------------------
-    const ctx2 = document.getElementById("chartHeater").getContext("2d");
-    const chartHeater = new Chart(ctx2, {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          label: "Grzałka (0/1)",
-          data: [],
-          stepped: true,
-          borderWidth: 2
-        }]
-      },
-      options: {
-        animation: false,
-        scales: { y: { min: 0, max: 1, ticks: { stepSize: 1 } } }
+      const v = snap.val();
+      if (v !== null) {
+        chartTempDS.options.plugins.annotation.annotations.min.yMin = Number(v);
+        chartTempDS.options.plugins.annotation.annotations.min.yMax = Number(v);
+        chartTempDS.update();
       }
     });
 
+    db.ref("/settings/tempMax").on("value", snap => {
+      const v = snap.val();
+      if (v !== null) {
+        chartTempDS.options.plugins.annotation.annotations.max.yMin = Number(v);
+        chartTempDS.options.plugins.annotation.annotations.max.yMax = Number(v);
+        chartTempDS.update();
+      }
+    });
+
+    // ===== GRZAŁKA =====
+    const chartHeater = new Chart(
+      document.getElementById("chartHeater"),
+      {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "Grzałka", data: [], stepped: true }] },
+        options: { animation: false, scales: { y: { min: 0, max: 1, ticks: { stepSize: 1 }}}}
+      }
+    );
+
     db.ref("/heaterState").on("value", snap => {
-      const v = snap.val() ? 1 : 0;
-      const t = new Date().toLocaleTimeString();
-
-      chartHeater.data.labels.push(t);
-      chartHeater.data.datasets[0].data.push(v);
-
+      chartHeater.data.labels.push(new Date().toLocaleTimeString());
+      chartHeater.data.datasets[0].data.push(snap.val() ? 1 : 0);
       limit(chartHeater);
       chartHeater.update();
     });
 
-    // -----------------------------------------------------------
-    // 3) WYKRES TEMPERATURY BMP280
-    // -----------------------------------------------------------
-    const ctx3 = document.getElementById("chartBMPtemp").getContext("2d");
-    const chartBMPtemp = new Chart(ctx3, {
-      type: "line",
-      data: { labels: [], datasets: [{ label: "BMP280 Temp (°C)", data: [], borderWidth: 2 }] },
-      options: { animation: false }
-    });
+    // ===== BMP280 TEMP =====
+    const chartBMPtemp = new Chart(
+      document.getElementById("chartBMPtemp"),
+      {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "BMP280 Temp (°C)", data: [] }] },
+        options: { animation: false }
+      }
+    );
 
     db.ref("/bmp280/temperature").on("value", snap => {
       const v = snap.val();
-      const t = new Date().toLocaleTimeString();
+      if (v === null) return;
 
-      chartBMPtemp.data.labels.push(t);
-      chartBMPtemp.data.datasets[0].data.push(v);
-
+      chartBMPtemp.data.labels.push(new Date().toLocaleTimeString());
+      chartBMPtemp.data.datasets[0].data.push(
+        Number(Number(v).toFixed(1))
+      );
       limit(chartBMPtemp);
       chartBMPtemp.update();
     });
 
-    // -----------------------------------------------------------
-    // 4) WYKRES CIŚNIENIA BMP280
-    // -----------------------------------------------------------
-    const ctx4 = document.getElementById("chartBMPpress").getContext("2d");
-    const chartBMPpress = new Chart(ctx4, {
-      type: "line",
-      data: { labels: [], datasets: [{ label: "BMP280 Ciśnienie (hPa)", data: [], borderWidth: 2 }] },
-      options: { animation: false }
-    });
+    // ===== BMP280 PRESS =====
+    const chartBMPpress = new Chart(
+      document.getElementById("chartBMPpress"),
+      {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "BMP280 Ciśnienie (hPa)", data: [] }] },
+        options: { animation: false }
+      }
+    );
 
     db.ref("/bmp280/pressure").on("value", snap => {
       const v = snap.val();
-      const t = new Date().toLocaleTimeString();
+      if (v === null) return;
 
-      chartBMPpress.data.labels.push(t);
-      chartBMPpress.data.datasets[0].data.push(v);
-
+      chartBMPpress.data.labels.push(new Date().toLocaleTimeString());
+      chartBMPpress.data.datasets[0].data.push(
+        Number(Number(v).toFixed(1))
+      );
       limit(chartBMPpress);
       chartBMPpress.update();
     });
   }
 </script>
-
 </body>
 </html>
