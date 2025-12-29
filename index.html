@@ -25,15 +25,14 @@
 
   <!-- DASHBOARD -->
   <div id="dashboard">
-  
 
     <!-- Ustawienia temperatury -->
     <h3>Dwubiegunowa regulacja temperatury</h3>
-    <label>Temperatura MIN: </label>
-    <input type="number" id="tempMin" step="0.1"> °C<br>
+    <label>Temperatura MIN:</label>
+    <input type="number" id="tempMin" step="0.1"> °C
 
-    <label>Temperatura MAX: </label>
-    <input type="number" id="tempMax" step="0.1"> °C<br>
+    <label>Temperatura MAX:</label>
+    <input type="number" id="tempMax" step="0.1"> °C
 
     <button onclick="saveSettings()">Zapisz ustawienia</button>
 
@@ -45,18 +44,22 @@
     <p>Temperatura w pomieszczeniu (BMP280): <span id="bmpTemp">--</span> °C</p>
     <p>Ciśnienie w pomieszczeniu (BMP280): <span id="bmpPressure">--</span> hPa</p>
     <p>Grzałka: <span id="heaterState">--</span></p>
-    <p><a href="https://rozmi61.github.io/ESP32/wykresy" target="_blank">Wykresy</a></p>
+
+    <p>
+      <a href="https://rozmi61.github.io/ESP32/wykresy" target="_blank">Wykresy</a>
+    </p>
+
     <hr>
 
     <!-- Sterowanie RGB -->
     <h3>Oświetlenie RGB</h3>
     <input type="color" id="colorPicker" value="#ff0000">
 
-    <br>
+    <br><br>
     <button onclick="logout()">Wyloguj</button>
-    
   </div>
 
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
@@ -71,10 +74,11 @@
     };
 
     firebase.initializeApp(firebaseConfig);
+
     const db = firebase.database();
     const auth = firebase.auth();
 
-    // --- SPRAWDZENIE STANU ZALOGOWANIA ---
+    // --- SPRAWDZENIE STANU LOGOWANIA ---
     auth.onAuthStateChanged(user => {
       if (user) {
         document.getElementById("loginForm").style.display = "none";
@@ -86,7 +90,7 @@
       }
     });
 
-    // --- FUNKCJE LOGOWANIA/ WYLOGOWANIA ---
+    // --- LOGOWANIE ---
     function login() {
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
@@ -94,9 +98,6 @@
       errorElem.innerText = "";
 
       auth.signInWithEmailAndPassword(email, password)
-        .then(() => {
-          // dashboard pokaże się automatycznie w onAuthStateChanged
-        })
         .catch(error => {
           errorElem.innerText = "Błąd logowania: " + error.message;
         });
@@ -106,37 +107,49 @@
       auth.signOut();
     }
 
-    // --- TWOJA ORYGINALNA FUNKCJA DASHBOARD ---
+    // --- DASHBOARD ---
     function initApp() {
-      // --- Pobieranie ustawień MIN/MAX ---
+
+      // --- tempMin / tempMax (1 miejsce po przecinku) ---
       db.ref("/settings/tempMin").on("value", snap => {
-        document.getElementById("tempMin").value = snap.val();
-      });
-      db.ref("/settings/tempMax").on("value", snap => {
-        document.getElementById("tempMax").value = snap.val();
+        const v = snap.val();
+        if (v !== null)
+          document.getElementById("tempMin").value = Number(v).toFixed(1);
       });
 
-      // --- Odczyt temperatury DS18B20 ---
-      db.ref("/temperature").on("value", snapshot => {
-        document.getElementById("temp").innerText = snapshot.val();
+      db.ref("/settings/tempMax").on("value", snap => {
+        const v = snap.val();
+        if (v !== null)
+          document.getElementById("tempMax").value = Number(v).toFixed(1);
+      });
+
+      // --- DS18B20 ---
+      db.ref("/temperature").on("value", snap => {
+        const v = snap.val();
+        if (v !== null)
+          document.getElementById("temp").innerText = Number(v).toFixed(1);
       });
 
       // --- BMP280 ---
-      db.ref("/bmp280/temperature").on("value", snapshot => {
-        document.getElementById("bmpTemp").innerText = snapshot.val();
-      });
-      db.ref("/bmp280/pressure").on("value", snapshot => {
-        document.getElementById("bmpPressure").innerText = snapshot.val();
-      });
-
-      // --- Stan grzałki ---
-      db.ref("/heaterState").on("value", snap => {
+      db.ref("/bmp280/temperature").on("value", snap => {
         const v = snap.val();
-        document.getElementById("heaterState").innerText =
-          v ? "Włączona" : "Wyłączona";
+        if (v !== null)
+          document.getElementById("bmpTemp").innerText = Number(v).toFixed(1);
       });
 
-      // --- Sterowanie RGB ---
+      db.ref("/bmp280/pressure").on("value", snap => {
+        const v = snap.val();
+        if (v !== null)
+          document.getElementById("bmpPressure").innerText = Number(v).toFixed(1);
+      });
+
+      // --- Grzałka ---
+      db.ref("/heaterState").on("value", snap => {
+        document.getElementById("heaterState").innerText =
+          snap.val() ? "Włączona" : "Wyłączona";
+      });
+
+      // --- RGB ---
       const picker = document.getElementById("colorPicker");
       picker.addEventListener("input", e => {
         const hex = e.target.value;
@@ -146,7 +159,7 @@
       });
     }
 
-    // --- ZAPIS USTAWIEŃ DO FIREBASE ---
+    // --- ZAPIS USTAWIEŃ ---
     function saveSettings() {
       const min = parseFloat(document.getElementById("tempMin").value);
       const max = parseFloat(document.getElementById("tempMax").value);
